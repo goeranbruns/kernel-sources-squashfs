@@ -41,3 +41,54 @@ pre_pkg_preinst() {
   eend $?
   fi
 }
+
+post_pkg_postinst() {
+  ebegin "Mounting ${EROOT}/usr/src/linux-${KV_FULL}"
+  ${EROOT}/etc/local.d/mount-${KV_FULL}.start >/dev/null
+  retval=$?
+  eend $retval
+  [[ "$retval" -ne "0" ]] && return
+  ebegin "Populating build directory with default config"
+  OLDPWD=$(pwd)
+  cd "${EROOT}/usr/src/linux-${KV_FULL}"
+  OLDARCH=$ARCH
+  unset ARCH
+  make O="${EROOT}/usr/src/build-${KV_FULL}" defconfig >/dev/null
+  eend $?
+  if [[ -f "${EROOT}/proc/config.gz" ]]; then
+    ebegin "Found running kernel config"
+    ebegin "Copying running kernel config"
+    zcat "${EROOT}/proc/config.gz" > "${EROOT}/usr/src/build-${KV_FULL}/.config"
+    eend $?
+    ebegin "Incorporate current kernel config"
+    make O="${EROOT}/usr/src/build-${KV_FULL}" oldconfig >/dev/null
+    eend $?
+  fi
+  ARCH=$OLDARCH
+  cd "${OLDPWD}"
+  
+  use symlink && SYMLINK=1
+  if [[ "$SYMLINK" == "1" ]]; then
+    [[ -h ${EROOT}/usr/src/linux ]] && rm ${EROOT}/usr/src/linux
+    ebegin "Symlinking build directory to linux"
+    ln -sf ${EROOT}/usr/src/build-${KV_FULL} ${EROOT}/usr/src/linux
+    eend $?
+  fi
+ }
+ 
+ pre_pkg_prerm() {
+  grep "${EROOT}/usr/src/linux-${KV_FULL}" "/proc/self/mountinfo" >/dev/null
+  if [[ "$?" -eq "0" ]]; then
+    ebegin "Unmounting ${EROOT}/usr/src/linux-${KV_FULL}"
+    umount "${EROOT}/usr/src/linux-${KV_FULL}"
+    eend $?
+  fi
+}
+
+post_pkg_postrm() {
+  if [[ -d "${EROOT}/usr/src/build-${KV_FULL}" ]]; then
+    ebegin "Removing build directory"
+    rm -rf "${EROOT}/usr/src/build-${KV_FULL}"
+    eend $?
+  fi
+}

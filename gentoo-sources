@@ -1,0 +1,43 @@
+# /etc/portage/env/sys-kernel/gentoo-sources
+pre_src_install() {
+  ebegin "Building squashfs image from kernel sources"
+  mksquashfs "${WORKDIR}/linux-${KV_FULL}" "${WORKDIR}/linux-${KV_FULL}.sqfs"
+  retval=$?
+  eend $retval
+  [[ "$retval" -ne "0" ]] && return
+  ebegin "Removing sources"
+  find "${WORKDIR}/linux-${KV_FULL}" -mindepth 1 -delete
+  eend $?
+  # add dummy file so kernel dir gets installed
+  touch "${WORKDIR}/linux-${KV_FULL}/.keep"
+}
+
+post_src_install() {
+  ebegin "Creating build directory"
+  keepdir "${EROOT}/usr/src/build-${KV_FULL}"
+  ebegin "Creating mount skript"
+  dodir "${EROOT}/etc/local.d"
+  MOUNT_SKRIPT="${ED}/etc/local.d/mount-${KV_FULL}.start"
+echo "#!/bin/bash
+# mounting squashfs image of kernel sources
+if [[ -f \"${EROOT}/usr/src/linux-${KV_FULL}.sqfs\" ]] && [[ -d  \"${EROOT}/usr/src/linux-${KV_FULL}\" ]]; then
+  grep \"${EROOT}/usr/src/linux-${KV_FULL}\" \"/proc/self/mountinfo\" >/dev/null
+  if [[ \"\$?\" -eq \"1\" ]]; then
+    echo \"Mounting ${EROOT}/usr/src/linux-${KV_FULL}\"
+    mount -t squashfs,ro \"${EROOT}/usr/src/linux-${KV_FULL}.sqfs\"  \"${EROOT}/usr/src/linux-${KV_FULL}\"
+    retval=\$?
+    exit \$retval
+  fi
+fi
+exit 1" > $MOUNT_SKRIPT
+  chmod 755 $MOUNT_SKRIPT
+}
+
+pre_pkg_preinst() {
+  grep "${EROOT}/usr/src/linux-${KV_FULL}" "/proc/self/mountinfo" >/dev/null
+  if [[ "$?" -eq "0" ]]; then
+    ebegin "Unmounting ${EROOT}/usr/src/linux-${KV_FULL}"
+    umount "${EROOT}/usr/src/linux-${KV_FULL}"
+  eend $?
+  fi
+}

@@ -63,6 +63,14 @@ post_pkg_postinst() {
     ebegin "Incorporate current kernel config"
     make O="${EROOT}/usr/src/build-${KV_FULL}" oldconfig >/dev/null
     eend $?
+  elif [[ -f "${EROOT}/boot/config-$(uname -r)" ]]; then
+    ebegin "Found running kernel config in /boot"
+    ebegin "Copying running kernel config"
+    cat "${EROOT}/boot/config-$(uname -r)" > "${EROOT}/usr/src/build-${KV_FULL}/.config"
+    eend $?
+    ebegin "Incorporate current kernel config"
+    make O="${EROOT}/usr/src/build-${KV_FULL}" oldconfig >/dev/null
+    eend $?
   fi
   ARCH=$OLDARCH
   cd "${OLDPWD}"
